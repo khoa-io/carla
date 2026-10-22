@@ -46,6 +46,7 @@ The [CARLA documentation](https://carla.readthedocs.io/en/latest/) is hosted on 
 
 - [Building on Linux](https://carla.readthedocs.io/en/latest/build_linux/)
 - [Building on Windows](https://carla.readthedocs.io/en/latest/build_windows/)
+- [Native Apple Silicon build](Docs/build_macos.md) (native client and Python wheel, and the native CARLA simulator)
 - [First steps](https://carla.readthedocs.io/en/latest/tuto_first_steps/)
 - [CARLA asset catalogue](https://carla.readthedocs.io/en/latest/catalogue/)
 - [Python API reference](https://carla.readthedocs.io/en/latest/python_api/)

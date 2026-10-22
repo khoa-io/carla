@@ -1191,9 +1191,13 @@ bool UMapGeneratorWidget::CookVegetationToWorld(
   {
     ULevel* Level = World->GetCurrentLevel();
 
-    VectorRegister	Rotation{ 0,0,0 };
-    VectorRegister	Translation{ 200000.0, 200000.0, 0.0 };
-    VectorRegister Scale3D{ 2500,2500,900 };
+    // NOTE: The original code used VectorRegister here, which only has an FTransform
+    // constructor in the SSE-vectorized math header. On platforms without that header
+    // (e.g. arm64 macOS) the types below are the portable equivalent of the intended
+    // identity rotation, translation and scale.
+    FQuat	Rotation = FQuat::Identity;
+    FVector	Translation{ 200000.0, 200000.0, 0.0 };
+    FVector Scale3D{ 2500,2500,900 };
     EObjectFlags InObjectFlags = RF_Transactional;
     FName InName = NAME_None;
 

@@ -7,10 +7,19 @@
 # For a copy, see <https://opensource.org/licenses/MIT>.
 
 from setuptools import setup, Extension
+from setuptools.command.build_ext import build_ext
 
 import fnmatch
 import os
+import platform
+import shlex
 import sys
+
+class CarlaBuildExt(build_ext):
+    def run(self):
+        if sys.platform == 'darwin':
+            self.force = True
+        super().run()
 
 def is_rss_variant_enabled():
     if 'BUILD_RSS_VARIANT' in os.environ and os.environ['BUILD_RSS_VARIANT'] == 'true':
@@ -31,7 +40,42 @@ def get_libcarla_extensions():
             for filename in fnmatch.filter(filenames, file_filter):
                 yield os.path.join(root, filename)
 
-    if os.name == "posix":
+    if sys.platform == "darwin":
+        if is_rss_variant_enabled():
+            raise NotImplementedError("The RSS variant is not supported on macOS")
+        if platform.machine() != 'arm64':
+            raise NotImplementedError("The native macOS build currently requires an ARM64 Python interpreter")
+        architecture_flags = shlex.split(os.environ.setdefault('ARCHFLAGS', '-arch arm64'))
+        if architecture_flags != ['-arch', 'arm64']:
+            raise ValueError("The native macOS build requires ARCHFLAGS='-arch arm64'")
+        deployment_target = os.environ.setdefault('MACOSX_DEPLOYMENT_TARGET', '12.0')
+        pwd = os.path.dirname(os.path.realpath(__file__))
+        enable_osm2odr = os.environ.get('CARLA_BUILD_OSM2ODR', 'false').lower() == 'true'
+        required_libs = [
+            'carla_client', 'rpc', 'boost_filesystem',
+            'Recast', 'Detour', 'DetourCrowd', 'png',
+            'boost_python%d%d' % (sys.version_info.major, sys.version_info.minor)]
+        if enable_osm2odr:
+            required_libs += ['osm2odr', 'xerces-c', 'proj', 'sqlite3']
+        extra_link_args = [
+            os.path.join(pwd, 'dependencies/lib/lib%s.a' % library)
+            for library in required_libs]
+        missing_libs = [library for library in extra_link_args if not os.path.isfile(library)]
+        if missing_libs:
+            raise RuntimeError("Missing native macOS dependencies; run make LibCarla.client from the repository root first:\n" +
+                               '\n'.join(missing_libs))
+        extra_link_args += ['-lz', '-stdlib=libc++', '-mmacosx-version-min=' + deployment_target]
+        extra_compile_args = [
+            '-isystem', os.path.join(pwd, 'dependencies/include/system'),
+            '-std=c++14', '-stdlib=libc++', '-mmacosx-version-min=' + deployment_target,
+            '-Wall', '-Wextra',
+            '-DBOOST_ERROR_CODE_HEADER_ONLY', '-DBOOST_PYTHON_STATIC_LIB',
+            '-DLIBCARLA_WITH_PYTHON_SUPPORT',
+            '-DLIBCARLA_IMAGE_WITH_PNG_SUPPORT=true',
+            '-DLIBCARLA_IMAGE_WITH_JPEG_SUPPORT=false',
+            '-DLIBCARLA_IMAGE_WITH_TIFF_SUPPORT=false',
+            '-DLIBCARLA_WITH_OSM2ODR=%d' % enable_osm2odr]
+    elif os.name == "posix":
         import distro
         supported_dists = ["ubuntu", "debian", "deepin"]
         
@@ -149,7 +193,7 @@ def get_libcarla_extensions():
             libraries=libraries,
             extra_compile_args=extra_compile_args,
             extra_link_args=extra_link_args,
-            language='c++14',
+            language='c++' if sys.platform == 'darwin' else 'c++14',
             depends=depends)
 
     print('compiling:\n  - %s' % '\n  - '.join(sources))
@@ -170,6 +214,7 @@ setup(
     package_dir={'': 'source'},
     packages=['carla'],
     ext_modules=get_libcarla_extensions(),
+    cmdclass={'build_ext': CarlaBuildExt},
     license=get_license(),
     description='Python API for communicating with the CARLA server.',
     long_description=long_description,

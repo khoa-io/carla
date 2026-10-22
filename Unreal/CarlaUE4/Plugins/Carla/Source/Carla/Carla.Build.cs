@@ -62,6 +62,12 @@ public class Carla : ModuleRules
       }
     }
 
+    if (Target.Platform == UnrealTargetPlatform.Mac &&
+        (UsingCarSim || UsingChrono || UsingPytorch || UsingRos2))
+    {
+      throw new BuildException("CARLA's experimental macOS target requires CarSim, Chrono, Pytorch and Ros2 OFF in Config/OptionalModules.ini; their native macOS dependencies have not been ported.");
+    }
+
     PublicIncludePaths.AddRange(
       new string[] {
         // ... add public include paths required here ...
@@ -224,6 +230,23 @@ public class Carla : ModuleRules
       PublicAdditionalLibraries.Add(Path.Combine(LibCarlaInstallPath, "lib", "osm2odr.lib"));
       PublicAdditionalLibraries.Add(Path.Combine(LibCarlaInstallPath, "lib", "zlibstatic.lib"));
     }
+    else if (Target.Platform == UnrealTargetPlatform.Mac)
+    {
+      string[] Libraries = {
+        "rpc", "carla_server", "sqlite3", "xerces-c", "proj", "osm2odr"
+      };
+      foreach (string Library in Libraries)
+      {
+        string LibraryPath = Path.Combine(LibCarlaInstallPath, "lib", GetLibName(Library));
+        if (!File.Exists(LibraryPath))
+        {
+          throw new BuildException("Missing native macOS server dependency: " + LibraryPath + ". The macOS client build does not produce Unreal server dependencies. See Docs/macos_engine_audit.md.");
+        }
+        PublicAdditionalLibraries.Add(LibraryPath);
+      }
+      PublicSystemLibraries.Add("z");
+      PublicSystemLibraries.Add("iconv");
+    }
     else
     {
       PublicAdditionalLibraries.Add(Path.Combine(LibCarlaInstallPath, "lib", GetLibName("rpc")));
@@ -342,8 +365,16 @@ public class Carla : ModuleRules
     // Include path.
     string LibCarlaIncludePath = Path.Combine(LibCarlaInstallPath, "include");
 
-    PublicIncludePaths.Add(LibCarlaIncludePath);
-    PrivateIncludePaths.Add(LibCarlaIncludePath);
+    if (Target.Platform == UnrealTargetPlatform.Mac)
+    {
+      PublicSystemIncludePaths.Add(LibCarlaIncludePath);
+      PublicDefinitions.Add("MSGPACK_DISABLE_LEGACY_NIL");
+    }
+    else
+    {
+      PublicIncludePaths.Add(LibCarlaIncludePath);
+      PrivateIncludePaths.Add(LibCarlaIncludePath);
+    }
 
     PublicDefinitions.Add("ASIO_NO_EXCEPTIONS");
     PublicDefinitions.Add("BOOST_NO_EXCEPTIONS");

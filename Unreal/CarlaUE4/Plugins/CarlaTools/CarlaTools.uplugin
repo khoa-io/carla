@@ -44,7 +44,8 @@
 		},
 		{
 			"Name": "SimReady",
-			"Enabled": true
+			"Enabled": true,
+			"BlacklistPlatforms": ["Mac"]
 		}
 	]
 }

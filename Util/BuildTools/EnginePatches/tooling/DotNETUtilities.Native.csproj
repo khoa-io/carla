@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>DotNETUtilities</AssemblyName>
+    <RootNamespace>Tools.DotNETCommon</RootNamespace>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <OutputPath>../../../../Binaries/DotNET/</OutputPath>
+    <DefineConstants>TRACE;NET_CORE;NATIVE_DOTNET;__MonoCS__</DefineConstants>
+    <EnableUnsafeBinaryFormatterSerialization>true</EnableUnsafeBinaryFormatterSerialization>
+    <NoWarn>SYSLIB0011;SYSLIB0050;SYSLIB0051;CA1416</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="**/*.cs" Exclude="obj/**;bin/**" />
+    <Compile Include="../MetaData.cs" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>UnrealBuildTool</AssemblyName>
+    <RootNamespace>UnrealBuildTool</RootNamespace>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <OutputPath>../../../Binaries/DotNET/</OutputPath>
+    <DefineConstants>TRACE;NET_CORE;NATIVE_DOTNET;__MonoCS__</DefineConstants>
+    <EnableUnsafeBinaryFormatterSerialization>true</EnableUnsafeBinaryFormatterSerialization>
+    <NoWarn>SYSLIB0011;SYSLIB0050;SYSLIB0051;CA1416</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="**/*.cs" Exclude="obj/**;bin/**;System/AggregateParsedTimingInfo.cs;System/ParseMsvcTimingInfo.cs" />
+    <Compile Include="../DotNETCommon/MetaData.cs" />
+    <ProjectReference Include="../DotNETCommon/DotNETUtilities/DotNETUtilities.Native.csproj" />
+    <Reference Include="Microsoft.CodeAnalysis">
+      <HintPath>$(MSBuildBinPath)/Roslyn/bincore/Microsoft.CodeAnalysis.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.CodeAnalysis.CSharp">
+      <HintPath>$(MSBuildBinPath)/Roslyn/bincore/Microsoft.CodeAnalysis.CSharp.dll</HintPath>
+    </Reference>
+    <Reference Include="System.CodeDom">
+      <HintPath>$(MSBuildBinPath)/System.CodeDom.dll</HintPath>
+    </Reference>
+    <Reference Include="System.ServiceProcess.ServiceController">
+      <HintPath>$(MSBuildBinPath)/System.ServiceProcess.ServiceController.dll</HintPath>
+    </Reference>
+    <Reference Include="Ionic.Zip.Reduced.Core">
+      <HintPath>../../../Binaries/ThirdParty/Ionic/Ionic.Zip.Reduced.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.VisualStudio.Setup.Configuration.Interop">
+      <HintPath>../../../Binaries/ThirdParty/VisualStudio/Microsoft.VisualStudio.Setup.Configuration.Interop.dll</HintPath>
+      <EmbedInteropTypes>true</EmbedInteropTypes>
+    </Reference>
+  </ItemGroup>
+</Project>

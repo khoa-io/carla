@@ -13,7 +13,7 @@ namespace std {
   using WaypointHash = hash<carla::road::element::Waypoint>;
 
   WaypointHash::result_type WaypointHash::operator()(const argument_type &waypoint) const {
-    WaypointHash::result_type seed = 0u;
+    std::size_t seed = 0u;
     boost::hash_combine(seed, waypoint.road_id);
     boost::hash_combine(seed, waypoint.section_id);
     boost::hash_combine(seed, waypoint.lane_id);

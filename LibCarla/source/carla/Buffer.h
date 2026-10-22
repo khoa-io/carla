@@ -73,7 +73,6 @@ namespace carla {
         _capacity(size),
         _data(std::make_unique<value_type[]>(size)) {}
 
-    /// @copydoc Buffer(size_type)
     explicit Buffer(uint64_t size)
       : Buffer([size]() {
           if (size > max_size()) {
@@ -82,8 +81,12 @@ namespace carla {
           return static_cast<size_type>(size);
         } ()) {}
 
+    template <typename SizeT, typename = typename std::enable_if<std::is_integral<SizeT>::value>::type>
+    explicit Buffer(SizeT size)
+      : Buffer(static_cast<uint64_t>(size)) {}
+
     /// Copy @a source into this buffer. Allocates the necessary memory.
-    template <typename T>
+    template <typename T, typename = typename std::enable_if<!std::is_integral<T>::value>::type>
     explicit Buffer(const T &source) {
       copy_from(source);
     }
@@ -92,7 +95,6 @@ namespace carla {
       copy_from(data, size);
     }
 
-    /// @copydoc Buffer(size_type)
     explicit Buffer(const value_type *data, uint64_t size)
       : Buffer(data, [size]() {
           if (size > max_size()) {
@@ -100,6 +102,10 @@ namespace carla {
           }
           return static_cast<size_type>(size);
         } ()) {}
+
+    template <typename SizeT, typename = typename std::enable_if<std::is_integral<SizeT>::value>::type>
+    explicit Buffer(const value_type *data, SizeT size)
+      : Buffer(data, static_cast<uint64_t>(size)) {}
 
     Buffer(const Buffer &) = delete;
 
@@ -258,12 +264,16 @@ namespace carla {
       _size = size;
     }
 
-    /// @copydoc reset(size_type)
     void reset(uint64_t size) {
       if (size > max_size()) {
         throw_exception(std::invalid_argument("message size too big"));
       }
       reset(static_cast<size_type>(size));
+    }
+
+    template <typename SizeT, typename = typename std::enable_if<std::is_integral<SizeT>::value>::type>
+    void reset(SizeT size) {
+      reset(static_cast<uint64_t>(size));
     }
 
     /// Resize the buffer, a new block of size @a size is

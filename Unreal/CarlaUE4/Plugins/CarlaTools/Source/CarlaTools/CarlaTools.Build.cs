@@ -38,6 +38,11 @@ public class CarlaTools : ModuleRules
       }
     }
 
+    if (Target.Platform == UnrealTargetPlatform.Mac && bUsingSimReadyPlugins)
+    {
+      throw new BuildException("CARLA's experimental macOS target requires SimReady OFF in Config/OptionalModules.ini; its native macOS dependencies have not been ported.");
+    }
+
 		PublicIncludePaths.AddRange(
 			new string[] {
 				// ... add public include paths required here ...
@@ -187,8 +192,15 @@ public class CarlaTools : ModuleRules
     // Include path.
     string LibCarlaIncludePath = Path.Combine(LibCarlaInstallPath, "include");
 
-    PublicIncludePaths.Add(LibCarlaIncludePath);
-    PrivateIncludePaths.Add(LibCarlaIncludePath);
+    if (Target.Platform == UnrealTargetPlatform.Mac)
+    {
+      PublicSystemIncludePaths.Add(LibCarlaIncludePath);
+    }
+    else
+    {
+      PublicIncludePaths.Add(LibCarlaIncludePath);
+      PrivateIncludePaths.Add(LibCarlaIncludePath);
+    }
 
     PublicDefinitions.Add("ASIO_NO_EXCEPTIONS");
     PublicDefinitions.Add("BOOST_NO_EXCEPTIONS");

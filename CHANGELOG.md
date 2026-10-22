@@ -1,5 +1,7 @@
 ## Latest Changes
 
+ * Added a native Apple Silicon build of CARLA 0.9.16: the client library and Python wheel, and the native CARLA simulator, which serves the RPC API, spawns vehicles and streams the camera sensors with the Metal renderer. See `Docs/build_macos.md`.
+
 ## CARLA 0.9.16
 
  * Added NVIDIA Cosmos Transfer1 integration

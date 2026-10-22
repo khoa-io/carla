@@ -55,6 +55,10 @@ void FPixelReader::WritePixelsToBuffer(
     RHICmdList.GetRenderQueryResult(Query, OldAbsTime, true);
   }
 
+  FPixelFormatInfo PixelFormat = GPixelFormats[BackBufferPixelFormat];
+  uint32 ExpectedRowBytes = BackBufferSize.X * PixelFormat.BlockBytes;
+  int32 Size = (BackBufferSize.Y * (PixelFormat.BlockBytes * BackBufferSize.X));
+
   AsyncTask(ENamedThreads::HighTaskPriority, [=, Readback=std::move(BackBufferReadback)]() mutable {
     {
       TRACE_CPUPROFILER_EVENT_SCOPE_STR("Wait GPU transfer");
@@ -66,16 +70,19 @@ void FPixelReader::WritePixelsToBuffer(
 
     {
       TRACE_CPUPROFILER_EVENT_SCOPE_STR("Readback data");
-      FPixelFormatInfo PixelFormat = GPixelFormats[BackBufferPixelFormat];
-      uint32 ExpectedRowBytes = BackBufferSize.X * PixelFormat.BlockBytes;
-      int32 Size = (BackBufferSize.Y * (PixelFormat.BlockBytes * BackBufferSize.X));
-      void* LockedData = Readback->Lock(Size);
-      if (LockedData)
-      {
-        FuncForSending(LockedData, Size, Offset, ExpectedRowBytes);
-      }
-      Readback->Unlock();
-      Readback.reset();
+      // The staging surfaces of the RHI are only accessible from the rendering
+      // thread, so the readback is locked there. The Metal RHI of this engine
+      // version does not implement a thread safe mapping of the staging surface.
+      ENQUEUE_RENDER_COMMAND(FReadback_LockSurface)(
+        [Readback = std::move(Readback), FuncForSending, Size, Offset, ExpectedRowBytes](auto &InRHICmdList) mutable
+        {
+          void* LockedData = Readback->Lock(Size);
+          if (LockedData)
+          {
+            FuncForSending(LockedData, Size, Offset, ExpectedRowBytes);
+          }
+          Readback->Unlock();
+        });
     }
   });
 }

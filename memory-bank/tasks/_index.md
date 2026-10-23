@@ -2,7 +2,7 @@
 
 ## In Progress
 
-- [TASK002](TASK002-native-macos-60fps.md) Improve native macOS camera delivery toward sustained 60 FPS — In Progress; 20% (review and workload contract complete, 2/10 subtasks); updated 2026-10-22. User authorized proceeding. Next: encoding-free baseline, exclusive instrumentation and Metal query A/B.
+- [TASK002](TASK002-native-macos-60fps.md) Improve native macOS camera delivery toward sustained 60 FPS — In Progress; 20% (review and workload contract complete, 2/10 subtasks); updated 2026-10-23. User authorized autonomous continuation. Next: investigate moving-scene throughput and shutdown, validate image fidelity and remaining lifecycle cases, then rerun moving acceptance.
 
 ## Pending
 

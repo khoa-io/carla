@@ -1,10 +1,10 @@
 # Active context
 
-Updated: 2026-10-22. Current follow-on: [TASK002](tasks/TASK002-native-macos-60fps.md), In Progress with implementation authorized. [TASK001](tasks/TASK001-native-macos-port.md) is complete for the native prototype; standalone packaging remains unresolved.
+Updated: 2026-10-23. Current follow-on: [TASK002](tasks/TASK002-native-macos-60fps.md), In Progress with autonomous implementation and experiment work authorized. [TASK001](tasks/TASK001-native-macos-port.md) is complete for the native prototype; standalone packaging remains unresolved.
 
 ## Direction
 
-- The user asked for autonomous work until the native port succeeds. The native prototype gate is met: the ARM64 simulator spawns a vehicle and streams synchronized RGB frames through the native Python API. RGB, depth, semantic, LiDAR and radar also pass a combined synchronization/data smoke test.
+- The user asked for autonomous work until the native port succeeds and has now asked to resume 60 FPS work. The native prototype gate is met: the ARM64 simulator spawns a vehicle and streams synchronized RGB frames through the native Python API. RGB, depth, semantic, LiDAR and radar also pass a combined synchronization/data smoke test.
 - CARLA release baseline is tag `0.9.16` at `294096eb1c38eabf246e4f3a9cdab704e33a7f4c`. Native port checkpoint is `d2736bbdbc00af9d8ea91ba4adec1b8aee49ac53` ("Add native macOS support for CARLA 0.9.16"). UE5 proposal is superseded.
 - Engine is the private UE4.26.2 fork pinned at `e9d9e60c85f643e10eeb03f42f61554d18dcb30f`, under `Build/macos-engine/source`, patched through `Util/BuildTools/EnginePatches`.
 - The validated simulator process is the editor build in game mode. The standalone `CarlaUE4` game target builds and cooked content is staged, but Cocoa/LaunchServices startup is unresolved. Sensor smoke tests establish payload delivery and frame/timestamp alignment, not analytic accuracy.
@@ -43,11 +43,12 @@ Updated: 2026-10-22. Current follow-on: [TASK002](tasks/TASK002-native-macos-60f
 
 ## Performance follow-on plan
 
-- User said "Proceed TASK002", authorizing implementation, rebuilding and owned runtime experiments. Review and workload contract are complete (2/10 subtasks); the encoding-free maintained benchmark is being established. See `Util/BuildTools/MacCameraBenchmark.md` for the exact static/moving workloads and 600-second acceptance gate.
-- Next: define workload/acceptance, establish an encoding-free baseline with full IDs and drop counters, and measure game/render/RHI/GPU/readback/send/client stages. Then isolate the unconditional Metal blocking-query workaround before readback-ring or worker changes.
+- User authorized autonomous TASK002 work. Review/workload contract are complete (2/10 subtasks); the maintained encoding-free harness now rejects missing/reordered IDs and unmatched world frames and parses complete server sessions without inventing totals. See `Util/BuildTools/MacCameraBenchmark.md` for the static/moving workload and 600-second acceptance gate.
+- Latest controlled query pair on fresh readbacks: query on/off measured 42.20/46.03 Python-delivered FPS. With query off and the 2-slot ring, one 600-second static run reached 60.98 FPS with consecutive IDs, zero ring saturation/map failures and zero camera-session transport drops. A previous 600-second static run had one missing camera ID and failed sequence validation. The seeded moving workload averaged 58.07 FPS over 60 seconds and its server required SIGKILL during cleanup.
+- The 2-slot readback ring is a promising measured change, but stays experimental and default-off. Effective runtime was Metal with separate RHI thread; ring diagnostics reduced median map time from ~11.3 ms to ~1.2 ms. Next: investigate moving-scene cost and shutdown hang, compare image data, and validate synchronous/multi-sensor/recreate/map-change/delayed-cancel scenarios before changing defaults.
 - Source corrections: `WaitForRenderThreadToFinish()` is a no-op; the query path does wait for Metal GPU completion. Workers currently yield-poll readiness, then map/copy/serialize/submit on the render thread. Effective RHI threading must be recorded at runtime; `UE4Editor-Cmd -game` alone does not imply editor-mode restrictions.
 - Keep Metal map/unmap on the render thread. Persistent slots still incur per-map Metal allocation/copy. Immutable capture metadata, ordered owned buffers and explicit cancel/drain are prerequisites for extending the asynchronous pipeline. Raw sensor references and the existing teardown flush do not establish safe lifetime ownership.
-- One 720p camera at 60 FPS with retained fidelity is plausible but unproven. No fixed-cost ceiling or gain from the proposed changes has been measured.
+- The 60 FPS static 10-minute gate passed once in the experimental 2-slot/query-off configuration; sustained 60 FPS in the seeded moving scene and retained image fidelity are not yet proven. No fixed-cost ceiling is established.
 
 ## Remaining productization
 - Compare sensor output with analytic references and extend timing/stability runs to larger maps and longer durations.

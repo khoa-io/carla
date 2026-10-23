@@ -22,7 +22,7 @@
 
 ## Performance work in progress
 
-- [TASK002](tasks/TASK002-native-macos-60fps.md): user authorized proceeding. Review/workload contract complete (2/10 subtasks); encoding-free maintained harness added, baseline in progress. Then exclusive timings, Metal query A/B, safe ownership/drain, persistent readbacks and ordered worker processing where evidence supports them.
+- [TASK002](tasks/TASK002-native-macos-60fps.md): user authorized autonomous continuation. Review/workload contract complete (2/10 subtasks). The encoding-free harness validates recorded ID sequences and parses server session counters. Fresh-readback query on/off measured 42.20/46.03 FPS. The experimental query-off 2-slot ring passed one 600-second static run at 60.98 FPS with consecutive IDs and no camera-session write drops; an earlier 600-second run had one missing camera ID. A seeded moving run averaged 58.07 FPS for 60 seconds and the server needed SIGKILL at shutdown. Full target acceptance remains open; the ring and query settings remain default-off pending image fidelity, moving throughput and lifecycle validation.
 
 ## Implemented
 
@@ -36,13 +36,27 @@
 - Read-only authenticated access to the required engine fork works.
 - Pinned `carla` engine commit `e9d9e60c85f643e10eeb03f42f61554d18dcb30f` reports UE4.26.2. Reproducible native patches bypass its Mac editor blacklist for the experimental path and support the validated native prototype.
 - Engine source is available under `Build/macos-engine/source`; native PhysX/server builds, Metal fixtures and editor-hosted vehicle/multi-sensor acceptance passed. Cooked Mac content is staged; standalone startup remains unresolved.
-- At native checkpoint `d2736bbdbc00af9d8ea91ba4adec1b8aee49ac53`, camera captures unconditionally execute a blocking absolute-time query on Metal. Map/copy/serialize/submit remain on the render thread, and the named final render-thread wait is a no-op. Persistent readback reuse and safe worker processing are proposals, with no measured speedup yet.
+- At native checkpoint `d2736bbdbc00af9d8ea91ba4adec1b8aee49ac53`, camera captures unconditionally executed a blocking absolute-time query on Metal. The current TASK002 branch has a Metal-only toggle (default on), capture snapshots/cancel-drain, optional persistent slots (default off), and readback/transport diagnostics. A diagnostic run observed effective Metal separate RHI threading, and the 2-slot ring reduced median map time from ~11.3 ms to ~1.2 ms. One 600-second static ring run passed at 60.98 FPS; the seeded moving run was below target and timed out during shutdown. Mapping/payload/send remain on the render thread; pixel fidelity and extended lifecycle scenarios remain open.
 
 ## Not validated
 
 - Analytic accuracy of sensor output, sustained 60 FPS delivery, the runnable cooked/packaged distribution, a clean second-machine install, Linux/Windows builds, and certification of the deployment target on older macOS versions. RGB/depth/segmentation/LiDAR/radar payload delivery and frame/timestamp alignment passed a short combined smoke test.
 
 ## Log
+
+### 2026-10-23 — 60 FPS ring evaluation
+
+- Compared query off with 2 and 3 readback slots in the static 720p workload: 57.13 and 57.53 FPS over 30 seconds with resource sampling. The extra slot did not materially improve throughput; both rings had zero saturation, high-water occupancy 2 and clean frame sequences. A separate uninstrumented 60-second 2-slot run delivered 60.17 FPS.
+- The first 600-second 2-slot static run averaged 61.11 FPS but omitted frame ID 7987, so sequence validation rejected it. A repeated run with server transport diagnostics averaged 60.98 FPS over 36,587 camera frames; all IDs were consecutive and matched world ticks, no timestamp errors, camera-session busy drops, map failures or ring saturation. p95/p99 interarrival were 17.04/17.30 ms and callback-to-world-tick proxy p95/p99 were 52.42/52.80 ms. The world-tick connection lacked a final close row; camera session totals were complete.
+- The seeded moving 60-second workload delivered 58.07 FPS with no sequence errors or camera-session write drops, but the final bins declined to 52.6–55.0 FPS and the owned editor process needed SIGKILL after its 20-second stop timeout. The static result therefore does not generalize to moving scenes or clean lifecycle yet.
+- Increased the benchmark's owned-server shutdown allowance to 60 seconds because the engine log reached its shutdown message at the previous 20-second deadline. A retry hit a native 60-second CARLA client timeout during cleanup before writing result JSON; the server log showed engine shutdown and the isolated PID/ports were confirmed gone. The harness change is syntax-checked, but this moving teardown path still needs a focused fix.
+- 15-second diagnostic runs logged `rhi=Metal editor=0 rhi_thread=1 rhi_task=0 bypass=0 query=0`. For the ring, median map was ~1.2 ms versus ~11.3 ms fresh; median render-thread queue delay remained ~25 ms. Per-frame logging makes these data diagnostic only. Short sample runs saw system GPU utilization 99–100% and no recorded thermal/performance warning; the ten-minute run did not sample thermal telemetry.
+
+### 2026-10-23 — TASK002 continuation
+
+- Re-read the mixed-model review and obtained an independent GPT-6 Astra consultation. Hardened the benchmark to fail on interior ID gaps, unmatched world ticks, reordering, timestamp mismatches and invalid dimensions; parse TCP session logs while marking partial diagnostics and suppressing incomplete totals.
+- Ran one owned 30-second native 1280x720 static-scene query A/B pair with `ReadbackSlots=0`, matching 10-second warmup, resource sampling and server diagnostics. Python camera delivery was 42.20 FPS with the blocking query on and 46.03 FPS off. Both runs had complete matching client/world frame sequences and clean benchmark teardown. The query-off sensor TCP session recorded one server write error during teardown; an unrelated session lacked a final close row, so aggregate server totals are unavailable.
+- The query toggle remains at its correctness-preserving enabled default. 60 FPS has not been met; continue with alternating repetitions, effective threading/GPU measurements, matching-frame image checks and review of fresh-readback task ordering before ring evaluation.
 
 ### 2026-10-22
 

@@ -13,7 +13,10 @@ VSync and the engine frame cap, records its command, and terminates only that
 child PID. It refuses occupied RPC/stream/secondary ports and existing output
 files. An existing server can be used by omitting `--launch-server`; its graphics
 settings must be recorded separately. Keep normal project rendering quality.
-Server logs and full metadata stay beside the JSON. No video is produced.
+Server logs and full metadata stay beside the JSON. The owned server gets 60
+seconds to shut down cleanly after SIGTERM before the harness uses SIGKILL; tune
+that with `--shutdown-timeout` if a measured workload needs longer. No video is
+produced.
 
 ## Workloads and comparison contract
 
@@ -52,8 +55,12 @@ independent GPU render rate. `arrival_after_world_callback_ms` compares matching
 frame callbacks and is a delivery-path proxy, not absolute capture latency;
 callback scheduling can make it negative. Server platform seconds and Python
 monotonic seconds must not be subtracted without clock calibration. Interior
-missing IDs, duplicates, reorderings and timestamp mismatches are reported.
-Capture/readback/network counters are required to attribute any missing IDs.
+missing IDs, duplicates, reorderings and timestamp mismatches are reported and
+fail the measurement. World ticks are retained during warmup and the one-second
+boundary drain so camera callback delay does not create false unmatched-frame
+failures. This validates recorded client sequences; it does not by itself prove
+that the engine rendered every world frame. Capture/readback/network counters
+are required to attribute any missing IDs.
 
 The benchmark batches destruction by actor ID, waits for an updated world
 snapshot, restores settings/weather, and records cleanup failures. A successful
@@ -68,6 +75,15 @@ The existing blocking query remains enabled by default. On Metal only, use
 fence. Other RHIs retain the established query path. Compare against the same
 binary with `--cvar 'carla.Camera.MetalBlockingQuery 1'`.
 
+Persistent readback slots are a separate experiment. The default is `0` (fresh
+readback per capture); use `--cvar 'carla.Camera.ReadbackSlots 2'` or `3` to
+enable a bounded Metal ring before spawning sensors. Keep query settings and all
+other workload variables fixed while comparing slot counts. The server reports
+ring submissions, retirements, saturation and high-water occupancy at teardown.
+Do not promote a slot count based on throughput alone: validate sequence and
+pixel fidelity, async and synchronous operation, multiple sensors, cancellation,
+recreation and clean shutdown first.
+
 Use `--cvar 'carla.Camera.ReadbackDiagnostics 1'` for a separate diagnostic run.
 Server log lines beginning `CarlaCameraReadback` contain a CSV header followed by
 per-readback exclusive CPU phase timings, frame ID and engine platform time.
@@ -78,3 +94,10 @@ existing conversion/copy/serialization/stream submission callback, and does not
 mean TCP completion. The first diagnostic capture logs effective RHI, editor
 mode, RHI thread, bypass, VSync, frame cap and screen percentage. Per-frame logging
 adds overhead, so leave diagnostics off in throughput comparisons.
+
+With `--stream-diagnostics`, the result JSON includes the latest
+`CarlaStreamStats` row per TCP session. Totals are emitted only when every
+observed session has a final close row; otherwise incomplete sessions are listed
+and totals remain unavailable. Reconcile complete server-side transport counters
+with sensor capture and Python callback counts. An unavailable or partial summary
+must not be interpreted as zero drops.

@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import platform
 import plistlib
+import re
 import socket
 import subprocess
 import threading
@@ -20,6 +21,12 @@ import carla
 ROOT = Path(__file__).resolve().parents[2]
 SENSOR_TYPES = {"rgb": "sensor.camera.rgb", "depth": "sensor.camera.depth",
                 "semantic": "sensor.camera.semantic_segmentation"}
+STREAM_STATS = re.compile(
+    r"CarlaStreamStats session=(?P<session>\d+) stream=(?P<stream>\d+) "
+    r"reason=(?P<reason>\S+) attempts=(?P<attempts>\d+) closed=(?P<closed>\d+) "
+    r"busy_drops=(?P<busy_drops>\d+) started=(?P<started>\d+) "
+    r"completed=(?P<completed>\d+) errors=(?P<errors>\d+) bytes=(?P<bytes>\d+)"
+)
 
 
 def percentiles(values):
@@ -43,6 +50,29 @@ def sequence_summary(rows):
             "reordered": sum(b < a for a, b in zip(ids, ids[1:])),
             "interior_missing_ids": sorted(set(range(min(ids), max(ids) + 1)) - set(ids)) if ids else [],
             "interarrival_ms": percentiles([(b[1] - a[1]) / 1e6 for a, b in zip(rows, rows[1:])])}
+
+
+def parse_stream_stats(log_path):
+    """Return final per-session counters, keeping periodic snapshots separate."""
+    if log_path is None or not log_path.is_file():
+        return {"available": False, "sessions": [], "totals": None}
+    latest = {}
+    with log_path.open(errors="replace") as source:
+        for line in source:
+            match = STREAM_STATS.search(line)
+            if match:
+                row = match.groupdict()
+                for key in ("session", "stream", "attempts", "closed", "busy_drops",
+                            "started", "completed", "errors", "bytes"):
+                    row[key] = int(row[key])
+                latest[row["session"]] = row
+    sessions = sorted(latest.values(), key=lambda row: row["session"])
+    counter_names = ("attempts", "closed", "busy_drops", "started", "completed", "errors", "bytes")
+    incomplete = [row["session"] for row in sessions if row["reason"] != "close"]
+    totals = ({key: sum(row[key] for row in sessions) for key in counter_names}
+              if sessions and not incomplete else None)
+    return {"available": bool(sessions), "complete": bool(sessions) and not incomplete,
+            "sessions": sessions, "incomplete_sessions": incomplete, "totals": totals}
 
 
 def git_revision(path):
@@ -104,6 +134,7 @@ def parse_args():
     parser.add_argument("--launch-server", action="store_true")
     parser.add_argument("--engine-root", type=Path, default=ROOT / "Build/macos-engine/source")
     parser.add_argument("--startup-timeout", type=float, default=600)
+    parser.add_argument("--shutdown-timeout", type=float, default=60)
     parser.add_argument("--server-arg", action="append", default=[], help="Use --server-arg=-Flag")
     parser.add_argument("--cvar", action="append", default=[], help="Additional server console setting, e.g. 'carla.Camera.MetalBlockingQuery 0'")
     parser.add_argument("--stream-diagnostics", action="store_true")
@@ -111,6 +142,7 @@ def parse_args():
     arguments = parser.parse_args()
     arguments.sensor_names = [] if arguments.sensors == "none" else arguments.sensors.split(",")
     if (arguments.seconds <= 0 or arguments.warmup < 0 or arguments.width <= 0
+            or arguments.shutdown_timeout <= 0
             or arguments.height <= 0 or len(set(arguments.sensor_names)) != len(arguments.sensor_names)
             or set(arguments.sensor_names) - SENSOR_TYPES.keys()):
         parser.error("Invalid duration, dimensions or sensor list")
@@ -165,7 +197,7 @@ def main():
     def on_tick(snapshot):
         entered = time.monotonic_ns()
         with lock:
-            if capture["start_ns"] is not None and not capture["closed"]:
+            if not capture["closed"]:
                 ticks.append([snapshot.frame, entered, snapshot.timestamp.elapsed_seconds,
                               snapshot.timestamp.platform_timestamp, snapshot.timestamp.delta_seconds])
 
@@ -290,16 +322,24 @@ def main():
                                      "width", "height", "callback_body_ns"], frames=frames,
                       world_summary=sequence_summary(measured_ticks), camera_summary={}, resource_samples=resource_samples)
         result["world_summary"]["fps"] = len(measured_ticks) / args.seconds
+        if (not measured_ticks or result["world_summary"]["duplicates"]
+                or result["world_summary"]["reordered"]
+                or result["world_summary"]["interior_missing_ids"]):
+            errors.append("world tick sequence has missing, duplicate or reordered frames")
         for name, rows in frames.items():
             measured = [row for row in rows if start_ns <= row[1] < end_ns]
             summary = sequence_summary(measured)
             summary["fps"] = len(measured) / args.seconds
             summary["callback_body_ms"] = percentiles([row[5] / 1e6 for row in measured])
+            unmatched_ids = [row[0] for row in measured if row[0] not in tick_by_id]
+            matched = [row for row in measured if row[0] in tick_by_id]
+            summary["world_tick_matches"] = len(matched)
+            summary["unmatched_world_frame_ids"] = unmatched_ids
             summary["arrival_after_world_callback_ms"] = percentiles([
-                (row[1] - tick_by_id[row[0]][1]) / 1e6 for row in measured if row[0] in tick_by_id])
+                (row[1] - tick_by_id[row[0]][1]) / 1e6 for row in matched])
             # This is a delivery-path proxy, not absolute GPU capture-to-client latency.
             summary["timestamp_mismatches"] = sum(abs(row[2] - tick_by_id[row[0]][2]) > 1e-5
-                                                   for row in measured if row[0] in tick_by_id)
+                                                   for row in matched)
             summary["invalid_dimensions"] = sum(row[3:5] != [args.width, args.height] for row in measured)
             summary["five_second_bins"] = []
             for begin in range(0, round(args.seconds * 1e9), 5_000_000_000):
@@ -320,8 +360,10 @@ def main():
                     "nonuniform": len(set(raw[0::4])) > 1}
                 if len(raw) != args.width * args.height * 4:
                     errors.append(f"{name}: invalid payload length")
-            if not measured or summary["duplicates"] or summary["reordered"] or summary["invalid_dimensions"] or summary["timestamp_mismatches"]:
-                errors.append(f"{name}: missing data or metadata/order validation failed")
+            if (not measured or summary["duplicates"] or summary["reordered"]
+                    or summary["interior_missing_ids"] or unmatched_ids
+                    or summary["invalid_dimensions"] or summary["timestamp_mismatches"]):
+                errors.append(f"{name}: sequence coverage or metadata/order validation failed")
         result["status"] = "failed" if errors else "measured"
     except BaseException as error:
         result["status"] = "failed"
@@ -359,14 +401,22 @@ def main():
             if server.poll() is None:
                 server.terminate()
                 try:
-                    server.wait(timeout=20)
+                    server.wait(timeout=args.shutdown_timeout)
                 except subprocess.TimeoutExpired:
-                    result["cleanup_errors"].append("Owned server required SIGKILL after 20s")
+                    result["cleanup_errors"].append(
+                        f"Owned server required SIGKILL after {args.shutdown_timeout:g}s")
                     server.kill()
                     server.wait()
             result["server_exit_code"] = server.returncode
         if server_log is not None:
             server_log.close()
+            result["stream_diagnostics"] = parse_stream_stats(Path(result["server_log"]))
+        if args.stream_diagnostics and "stream_diagnostics" not in result:
+            result["stream_diagnostics"] = {"available": False, "complete": False,
+                                            "sessions": [], "incomplete_sessions": [], "totals": None,
+                                            "note": "No owned server log was available to parse."}
+        elif args.stream_diagnostics and not result["stream_diagnostics"]["available"]:
+            result["stream_diagnostics"]["note"] = "No final session counters found; server diagnostics are incomplete."
         result["errors"] = errors
         if result["cleanup_errors"]:
             result["status"] = "failed"

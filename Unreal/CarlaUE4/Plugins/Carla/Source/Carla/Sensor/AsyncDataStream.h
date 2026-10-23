@@ -59,6 +59,11 @@ public:
   template <typename SensorT, typename... ArgsT>
   void Send(SensorT &Sensor, ArgsT &&... Args);
 
+  /// Submit an already serialized payload with this captured header.
+  /// Does not access the sensor actor.
+  template <typename... ArgsT>
+  void SendBuffer(ArgsT &&... Args);
+
   template <typename SensorT, typename... ArgsT>
   void SerializeAndSend(SensorT &Sensor, ArgsT &&... Args);
 
@@ -189,6 +194,13 @@ inline void FAsyncDataStreamTmpl<T>::SerializeAndSend(SensorT &Sensor, ArgsT &&.
 template <typename T>
 template <typename SensorT, typename... ArgsT>
 inline void FAsyncDataStreamTmpl<T>::Send(SensorT &Sensor, ArgsT &&... Args)
+{
+  SendBuffer(std::forward<ArgsT>(Args)...);
+}
+
+template <typename T>
+template <typename... ArgsT>
+inline void FAsyncDataStreamTmpl<T>::SendBuffer(ArgsT &&... Args)
 {
   // create views of buffers
   auto ViewHeader = carla::BufferView::CreateFrom(std::move(Header));

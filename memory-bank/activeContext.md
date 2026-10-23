@@ -1,13 +1,13 @@
 # Active context
 
-Updated: 2026-10-22. Active task: [TASK001](tasks/TASK001-native-macos-port.md).
+Updated: 2026-10-22. Current follow-on: [TASK002](tasks/TASK002-native-macos-60fps.md), In Progress with implementation authorized. [TASK001](tasks/TASK001-native-macos-port.md) is complete for the native prototype; standalone packaging remains unresolved.
 
 ## Direction
 
 - The user asked for autonomous work until the native port succeeds. The native prototype gate is met: the ARM64 simulator spawns a vehicle and streams synchronized RGB frames through the native Python API. RGB, depth, semantic, LiDAR and radar also pass a combined synchronization/data smoke test.
-- CARLA baseline is tag `0.9.16`, detached at `294096eb1c38eabf246e4f3a9cdab704e33a7f4c`. UE5 proposal is superseded. No branches, commits or upstream publications requested or made.
+- CARLA release baseline is tag `0.9.16` at `294096eb1c38eabf246e4f3a9cdab704e33a7f4c`. Native port checkpoint is `d2736bbdbc00af9d8ea91ba4adec1b8aee49ac53` ("Add native macOS support for CARLA 0.9.16"). UE5 proposal is superseded.
 - Engine is the private UE4.26.2 fork pinned at `e9d9e60c85f643e10eeb03f42f61554d18dcb30f`, under `Build/macos-engine/source`, patched through `Util/BuildTools/EnginePatches`.
-- The validated simulator process is the editor build in game mode. The standalone `CarlaUE4` game target builds and links natively, but still needs cooked content to run as a standalone app. Sensor smoke tests establish payload delivery and frame/timestamp alignment, not analytic accuracy.
+- The validated simulator process is the editor build in game mode. The standalone `CarlaUE4` game target builds and cooked content is staged, but Cocoa/LaunchServices startup is unresolved. Sensor smoke tests establish payload delivery and frame/timestamp alignment, not analytic accuracy.
 
 ## Validated
 
@@ -39,7 +39,15 @@ Updated: 2026-10-22. Active task: [TASK001](tasks/TASK001-native-macos-port.md).
 - The standalone game still does not pass startup: with the staged base directory supplied it aborts during Cocoa application registration, before the engine logs a startup error. LaunchServices `open -a` reports `kLSNoExecutableErr` for the generated app despite its ARM64 Mach-O executable being present. Investigate/fix the app bundle/run mode; do not claim standalone distribution works until the five-sensor smoke test passes from the cooked package.
 - The editor-hosted native acceptance remains green. Sensor smoke tests establish payload delivery and frame/timestamp alignment, not analytic accuracy.
 - A first uncapped asynchronous 1280x720 RGB sensor throughput run delivered 35.97 frames/s average (1,079 frames in 30.001 s) on this M1 Pro. The captured MP4 plays at 30 fps and the JSON records settings. Treat this as one-camera client-delivery throughput, not engine-internal FPS or a cross-platform comparison.
-- Follow-up uncapped tests: one 1920x1080 RGB camera delivered 28.95 frames/s (579 frames in 20.003 s); three simultaneous 1280x720 cameras (RGB, depth, semantic segmentation) each delivered 23.20 frames/s (464 synchronized frames in 20.001 s). The three-sensor helper emitted metrics before a native actor-destruction error during cleanup, so the measurement is usable but teardown is not clean. Results and 1080p video are under `Build/macos-engine/`.
+- Follow-up uncapped tests: one 1920x1080 RGB camera delivered 28.95 frames/s (579 callbacks in 20.003 s); three simultaneous 1280x720 cameras (RGB, depth, semantic segmentation) each delivered approximately 23.20 frames/s (464 callbacks in 20.001 s). Saved counts and endpoint IDs are consistent with reported continuity/alignment, but full sequences were not saved. The single-camera tests encoded video; the three-camera helper has measurement-boundary races and aborted during cleanup. These runs do not establish a hardware ceiling. Artifacts are local and ignored under `Build/macos-engine/`.
+
+## Performance follow-on plan
+
+- User said "Proceed TASK002", authorizing implementation, rebuilding and owned runtime experiments. Review and workload contract are complete (2/10 subtasks); the encoding-free maintained benchmark is being established. See `Util/BuildTools/MacCameraBenchmark.md` for the exact static/moving workloads and 600-second acceptance gate.
+- Next: define workload/acceptance, establish an encoding-free baseline with full IDs and drop counters, and measure game/render/RHI/GPU/readback/send/client stages. Then isolate the unconditional Metal blocking-query workaround before readback-ring or worker changes.
+- Source corrections: `WaitForRenderThreadToFinish()` is a no-op; the query path does wait for Metal GPU completion. Workers currently yield-poll readiness, then map/copy/serialize/submit on the render thread. Effective RHI threading must be recorded at runtime; `UE4Editor-Cmd -game` alone does not imply editor-mode restrictions.
+- Keep Metal map/unmap on the render thread. Persistent slots still incur per-map Metal allocation/copy. Immutable capture metadata, ordered owned buffers and explicit cancel/drain are prerequisites for extending the asynchronous pipeline. Raw sensor references and the existing teardown flush do not establish safe lifetime ownership.
+- One 720p camera at 60 FPS with retained fidelity is plausible but unproven. No fixed-cost ceiling or gain from the proposed changes has been measured.
 
 ## Remaining productization
 - Compare sensor output with analytic references and extend timing/stability runs to larger maps and longer durations.

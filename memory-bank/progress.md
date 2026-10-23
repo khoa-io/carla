@@ -20,6 +20,10 @@
 - The standalone app aborts during Cocoa application registration before engine startup. `open -a` reports `kLSNoExecutableErr` although the bundle contains its executable; the staged standalone server gate remains open.
 - Compare sensor output with analytic references and extend timing/stability runs to larger maps and longer durations.
 
+## Performance work in progress
+
+- [TASK002](tasks/TASK002-native-macos-60fps.md): user authorized proceeding. Review/workload contract complete (2/10 subtasks); encoding-free maintained harness added, baseline in progress. Then exclusive timings, Metal query A/B, safe ownership/drain, persistent readbacks and ordered worker processing where evidence supports them.
+
 ## Implemented
 
 - Darwin Makefile dispatch and workspace-local dependency/client bootstrap.
@@ -30,12 +34,13 @@
 ## Engine findings
 
 - Read-only authenticated access to the required engine fork works.
-- Inspected `carla` branch commit `e9d9e60c85f643e10eeb03f42f61554d18dcb30f` reports UE4.26.2. It contains partial native ARM64 support, but explicitly blacklists Mac Editor targets. Candidate engine compatibility with the release is not yet validated.
-- No engine checkout, native PhysX/server dependency build, matching cooked Mac content, simulator launch, or Metal sensor test is available yet.
+- Pinned `carla` engine commit `e9d9e60c85f643e10eeb03f42f61554d18dcb30f` reports UE4.26.2. Reproducible native patches bypass its Mac editor blacklist for the experimental path and support the validated native prototype.
+- Engine source is available under `Build/macos-engine/source`; native PhysX/server builds, Metal fixtures and editor-hosted vehicle/multi-sensor acceptance passed. Cooked Mac content is staged; standalone startup remains unresolved.
+- At native checkpoint `d2736bbdbc00af9d8ea91ba4adec1b8aee49ac53`, camera captures unconditionally execute a blocking absolute-time query on Metal. Map/copy/serialize/submit remain on the render thread, and the named final render-thread wait is a no-op. Persistent readback reuse and safe worker processing are proposals, with no measured speedup yet.
 
 ## Not validated
 
-- The depth, segmentation, LiDAR and radar sensors, the cooked and packaged distribution, a clean second-machine install, Linux/Windows builds, and the certification of the deployment target on older macOS versions.
+- Analytic accuracy of sensor output, sustained 60 FPS delivery, the runnable cooked/packaged distribution, a clean second-machine install, Linux/Windows builds, and certification of the deployment target on older macOS versions. RGB/depth/segmentation/LiDAR/radar payload delivery and frame/timestamp alignment passed a short combined smoke test.
 
 ## Log
 
@@ -73,3 +78,5 @@
 - Captured a first uncapped asynchronous 1280x720 RGB-camera run on the native server: 1,079 client-delivered frames in 30.001 seconds (35.97 FPS average; 27.147 ms median interval). The 30 fps playback MP4 and structured metadata are saved under `Build/macos-engine`; this is a single-camera throughput metric, not engine `stat fps` or a platform comparison.
 - Captured a second performance clip at 1920x1080. One async RGB camera delivered 579 frames in 20.003 s (28.95 client-delivered frames/s); the video is 20 s at 30 fps. Details: `Build/macos-engine/carla-macos-fps-1080p-results.json`.
 - Measured three simultaneous 1280x720 cameras (RGB, depth, semantic segmentation): each delivered 464 matching frames in 20.001 s (23.20 frames/s). The helper printed results but then exited with a native CARLA actor-destruction error during cleanup; follow up on cleanup separately. Details: `Build/macos-engine/carla-macos-fps-sensor-load-results.json`.
+- Completed an independent Astra/Sol/Luna source review and critique exchange. Qualified earlier throughput claims: saved counts/endpoint IDs are consistent with continuity/alignment but do not preserve every ID; one-camera tests encoded during measurement and the three-camera helper has counter-boundary races. These measurements are client-delivery results, not a hardware ceiling or isolated render rate. The teardown abort's cause remains unknown.
+- Created TASK002 at the user's request with the completed review plus nine pending subtasks, dependencies, acceptance proposal and source evidence. Corrected stale current-state summaries while preserving historical entries. This update only changes memory-bank Markdown; no source implementation, rebuild, server control or performance experiment was initiated.

@@ -396,6 +396,11 @@ public:
   /// Immediate enqueues render commands of the scene at the current time.
   void EnqueueRenderSceneImmediate();
 
+  std::shared_ptr<FPixelReaderReadbackState> GetPixelReadbackState() const
+  {
+    return PixelReadbackState;
+  }
+
   /// Blocks until the render thread has finished all it's tasks.
   void WaitForRenderThreadToFinish() {
     TRACE_CPUPROFILER_EVENT_SCOPE(ASceneCaptureSensor::WaitForRenderThreadToFinish);
@@ -446,6 +451,9 @@ protected:
   /// Render target necessary for scene capture.
   UPROPERTY(EditAnywhere)
   UTextureRenderTarget2D *CaptureRenderTarget = nullptr;
+
+  std::shared_ptr<FPixelReaderReadbackState> PixelReadbackState =
+      std::make_shared<FPixelReaderReadbackState>();
 
   /// Scene capture component.
   UPROPERTY(EditAnywhere)

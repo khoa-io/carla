@@ -5,7 +5,8 @@
 - Workspace: `/Volumes/WIZARD/Users/p2p/scm/github.com/carla-simulator/carla`.
 - Source: `https://github.com/carla-simulator/carla.git`.
 - Selected release: `0.9.16`, commit `294096eb1c38eabf246e4f3a9cdab704e33a7f4c`.
-- Matching engine: release README refers to `https://github.com/CarlaUnreal/UnrealEngine.git`, branch `carla`. Read-only authenticated access verified. Inspected candidate commit `e9d9e60c85f643e10eeb03f42f61554d18dcb30f` reports 4.26.2; release compatibility not yet validated by build.
+- Native port checkpoint: `d2736bbdbc00af9d8ea91ba4adec1b8aee49ac53`, "Add native macOS support for CARLA 0.9.16"; verified again when recording TASK002.
+- Matching engine: release README refers to `https://github.com/CarlaUnreal/UnrealEngine.git`, branch `carla`. Pinned commit `e9d9e60c85f643e10eeb03f42f61554d18dcb30f` reports 4.26.2. The patched native ARM64 editor/game-mode prototype has built and passed the vehicle/multi-sensor smoke gate; standalone staged-app startup remains unresolved.
 - Existing UE58 `AGENTS.md` and its Linux-only UE4 build skill were read before switching. Neither should be assumed present at the historical tag. Linux setup scripts are not macOS installers.
 
 ## Host observed 2026-10-22

@@ -24,6 +24,39 @@
 #include <carla/sensor/SensorRegistry.h>
 #include <compiler/enable-ue4-macros.h>
 
+#include <atomic>
+
+struct FPixelReaderReadbackRing;
+
+/// Shared non-UObject lifetime state. Ring contents are render-thread only.
+struct FPixelReaderReadbackState
+{
+  std::atomic_bool Cancelled{false};
+  std::atomic_size_t InFlight{0};
+  std::atomic_uint64_t Requested{0};
+  std::atomic_uint64_t SendAttempts{0};
+  std::atomic_uint64_t MapFailures{0};
+  std::shared_ptr<FPixelReaderReadbackRing> Ring;
+};
+
+struct FPixelReaderReadbackRequest
+{
+  explicit FPixelReaderReadbackRequest(std::shared_ptr<FPixelReaderReadbackState> InState)
+    : State(std::move(InState)) { ++State->InFlight; ++State->Requested; }
+  ~FPixelReaderReadbackRequest() { --State->InFlight; }
+  std::shared_ptr<FPixelReaderReadbackState> State;
+};
+
+struct FPixelReaderImageMetadata
+{
+  uint32 Width;
+  uint32 Height;
+  float FOV;
+  uint32 GetImageWidth() const { return Width; }
+  uint32 GetImageHeight() const { return Height; }
+  float GetFOVAngle() const { return FOV; }
+};
+
 // =============================================================================
 // -- FPixelReader -------------------------------------------------------------
 // =============================================================================
@@ -82,7 +115,20 @@ public:
       const UTextureRenderTarget2D &RenderTarget,
       uint32 Offset,
       FRHICommandListImmediate &InRHICmdList,
-      FPixelReader::Payload FuncForSending);
+      FPixelReader::Payload FuncForSending,
+      uint64 CaptureFrame = 0);
+
+  static void WritePixelsToBuffer(
+      FTextureRenderTargetResource &RenderResource,
+      uint32 Offset,
+      FRHICommandListImmediate &InRHICmdList,
+      FPixelReader::Payload FuncForSending,
+      uint64 CaptureFrame,
+      std::shared_ptr<FPixelReaderReadbackState> State,
+      bool SynchronousCapture = false);
+
+  /// Game-thread shutdown: cancel, join worker/render phases, then drain GPU work.
+  static void CancelAndDrain(std::shared_ptr<FPixelReaderReadbackState> State);
 
 };
 
@@ -100,6 +146,53 @@ void FPixelReader::SendPixelsInRenderThread(TSensor &Sensor, bool use16BitFormat
   {
     return;
   }
+
+#if PLATFORM_MAC && !defined(WITH_ROS2)
+  // Capture every actor-dependent value on the game thread. The render target
+  // resource remains valid until EndPlay drains the queued render commands.
+  check(IsInGameThread());
+  auto State = Sensor.GetPixelReadbackState();
+  if (State->Cancelled.load()) return;
+  auto Request = std::make_shared<FPixelReaderReadbackRequest>(State);
+  auto Stream = std::make_shared<FAsyncDataStream>(Sensor.GetDataStream(Sensor));
+  const uint64 Frame = FCarlaEngine::GetFrameCounter();
+  const bool SynchronousCapture = Sensor.GetEpisode().GetSettings().bSynchronousMode;
+  Stream->SetFrameNumber(Frame);
+  const FPixelReaderImageMetadata Metadata{Sensor.GetImageWidth(), Sensor.GetImageHeight(), Sensor.GetFOVAngle()};
+  auto *Resource = Sensor.CaptureRenderTarget->GameThread_GetRenderTargetResource();
+  Sensor.EnqueueRenderSceneImmediate();
+  ENQUEUE_RENDER_COMMAND(FWritePixels_SendSnapshot)(
+      [Resource, Request, Stream, Metadata, Frame, SynchronousCapture, Conversor = std::move(Conversor)](auto &RHICmdList) mutable
+      {
+        if (Request->State->Cancelled.load() || Resource == nullptr) return;
+        Payload Send = [Request, Stream, Metadata, Conversor = std::move(Conversor)]
+            (void *Data, uint32 Size, uint32 Offset, uint32 ExpectedRowBytes)
+        {
+          if (Request->State->Cancelled.load()) return;
+          TArray<TPixel> Converted;
+          if (Conversor)
+          {
+            TRACE_CPUPROFILER_EVENT_SCOPE_STR("Data conversion");
+            Converted = Conversor(Data, Size);
+            Data = Converted.GetData();
+            Size = Converted.Num() * Converted.GetTypeSize();
+          }
+          auto Buffer = Stream->PopBufferFromPool();
+          {
+            TRACE_CPUPROFILER_EVENT_SCOPE_STR("Buffer Copy");
+            Buffer.copy_from(Offset, boost::asio::buffer(Data, Size));
+          }
+          using Serializer = typename carla::sensor::SensorRegistry::get<TSensor *>::type;
+          auto Ready = Serializer::Serialize(Metadata, std::move(Buffer));
+          auto View = carla::BufferView::CreateFrom(std::move(Ready));
+          ++Request->State->SendAttempts;
+          Stream->SendBuffer(View);
+        };
+        WritePixelsToBuffer(*Resource,
+            carla::sensor::SensorRegistry::get<TSensor *>::type::header_offset,
+            RHICmdList, std::move(Send), Frame, Request->State, SynchronousCapture);
+      });
+#else
 
   /// Blocks until the render thread has finished all it's tasks.
   Sensor.EnqueueRenderSceneImmediate();
@@ -211,11 +304,12 @@ void FPixelReader::SendPixelsInRenderThread(TSensor &Sensor, bool use16BitFormat
               *Sensor.CaptureRenderTarget,
               carla::sensor::SensorRegistry::get<TSensor *>::type::header_offset,
               InRHICmdList,
-              std::move(FuncForSending));
+              std::move(FuncForSending), Frame);
         }
       }
     );
 
   // Blocks until the render thread has finished all it's tasks
   Sensor.WaitForRenderThreadToFinish();
+#endif
 }

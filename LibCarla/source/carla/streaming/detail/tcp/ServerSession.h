@@ -27,6 +27,7 @@
 
 #include <functional>
 #include <memory>
+#include <atomic>
 
 namespace carla {
 namespace streaming {
@@ -90,6 +91,8 @@ namespace tcp {
 
     void CloseNow(boost::system::error_code ec = boost::system::error_code());
 
+    void LogWriteStats(const char *reason) const;
+
     friend class Server;
 
     Server &_server;
@@ -109,6 +112,16 @@ namespace tcp {
     callback_function_type _on_closed;
 
     bool _is_writing = false;
+
+    // Opt-in observability only; this does not make concurrent Write callers safe.
+    const bool _write_diagnostics;
+    std::atomic_uint64_t _write_attempts{0u};
+    std::atomic_uint64_t _write_closed{0u};
+    std::atomic_uint64_t _write_busy_drops{0u};
+    std::atomic_uint64_t _write_started{0u};
+    std::atomic_uint64_t _write_completed{0u};
+    std::atomic_uint64_t _write_errors{0u};
+    std::atomic_uint64_t _write_bytes{0u};
   };
 
 } // namespace tcp

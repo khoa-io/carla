@@ -554,6 +554,10 @@ void ASceneCaptureSensor::SendGBufferTextures(FGBufferRequest& GBuffer)
 
 void ASceneCaptureSensor::BeginPlay()
 {
+#if PLATFORM_MAC && !defined(WITH_ROS2)
+  // A new generation cannot revive callbacks from a previous EndPlay.
+  PixelReadbackState = std::make_shared<FPixelReaderReadbackState>();
+#endif
   using namespace SceneCaptureSensor_local_ns;
 
   // Determine the gamma of the player.
@@ -614,6 +618,10 @@ void ASceneCaptureSensor::PostPhysTick(UWorld *World, ELevelTick TickType, float
 
 void ASceneCaptureSensor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+#if PLATFORM_MAC && !defined(WITH_ROS2)
+  // Stop asynchronous payloads before Super closes the stream/deregisters us.
+  FPixelReader::CancelAndDrain(PixelReadbackState);
+#endif
   Super::EndPlay(EndPlayReason);
   FlushRenderingCommands();
   SCENE_CAPTURE_COUNTER = 0u;

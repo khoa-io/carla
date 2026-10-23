@@ -16,6 +16,9 @@
 #include <boost/asio/post.hpp>
 
 #include <atomic>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <thread>
 
 namespace carla {
@@ -36,7 +39,11 @@ namespace tcp {
       _socket(io_context),
       _timeout(timeout),
       _deadline(io_context),
-      _strand(io_context) {}
+      _strand(io_context),
+      _write_diagnostics([] {
+        const char *value = std::getenv("CARLA_STREAMING_DIAGNOSTICS");
+        return value != nullptr && std::strcmp(value, "1") == 0;
+      }()) {}
 
   void ServerSession::Open(
       callback_function_type on_opened,
@@ -78,8 +85,12 @@ namespace tcp {
   void ServerSession::Write(std::shared_ptr<const Message> message) {
     DEBUG_ASSERT(message != nullptr);
     DEBUG_ASSERT(!message->empty());
+    if (_write_diagnostics && (++_write_attempts % 120u == 0u)) {
+      LogWriteStats("periodic");
+    }
     auto self = shared_from_this();
       if (!_socket.is_open()) {
+        if (_write_diagnostics) ++_write_closed;
         return;
       }
       if (_is_writing) {
@@ -90,14 +101,21 @@ namespace tcp {
           }
         } else {
           // ignore this message
+          if (_write_diagnostics) ++_write_busy_drops;
           log_debug("session", _session_id, ": connection too slow: message discarded");
           return;
         }
       }
       _is_writing = true;
+      if (_write_diagnostics) ++_write_started;
 
-      auto handle_sent = [this, self, message](const boost::system::error_code &ec, size_t DEBUG_ONLY(bytes)) {
+      auto handle_sent = [this, self, message](const boost::system::error_code &ec, size_t bytes) {
         _is_writing = false;
+        if (_write_diagnostics) {
+          _write_bytes += bytes;
+          if (ec) ++_write_errors;
+          else ++_write_completed;
+        }
         if (ec) {
           log_info("session", _session_id, ": error sending data :", ec.message());
           CloseNow(ec);
@@ -134,6 +152,7 @@ namespace tcp {
   }
 
   void ServerSession::CloseNow(boost::system::error_code ec) {
+    if (_write_diagnostics) LogWriteStats("close");
     _deadline.cancel();
     if (!ec)
     {
@@ -145,6 +164,22 @@ namespace tcp {
     }
     _on_closed(shared_from_this());
     log_debug("session", _session_id, "closed");
+  }
+
+  void ServerSession::LogWriteStats(const char *reason) const {
+    // One stdio call keeps each diagnostic row together across Asio threads.
+    // Periodic snapshots can straddle an attempt/completion; reconcile the last
+    // snapshot of a drained session, not arbitrary concurrent counter reads.
+    std::fprintf(stderr,
+        "CarlaStreamStats session=%zu stream=%u reason=%s attempts=%llu closed=%llu busy_drops=%llu started=%llu completed=%llu errors=%llu bytes=%llu\n",
+        _session_id, _stream_id, reason,
+        static_cast<unsigned long long>(_write_attempts.load()),
+        static_cast<unsigned long long>(_write_closed.load()),
+        static_cast<unsigned long long>(_write_busy_drops.load()),
+        static_cast<unsigned long long>(_write_started.load()),
+        static_cast<unsigned long long>(_write_completed.load()),
+        static_cast<unsigned long long>(_write_errors.load()),
+        static_cast<unsigned long long>(_write_bytes.load()));
   }
 
 } // namespace tcp

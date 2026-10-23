@@ -10,6 +10,7 @@ Plugins
 Unreal/CarlaUE4/Plugins/Streetmap
 Unreal/CarlaUE4/Plugins/HoudiniEngine
 build/
+Util/WebControl/target/
 
 
 /ExportedMaps

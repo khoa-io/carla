@@ -1,6 +1,6 @@
 # Active context
 
-Updated: 2026-10-23. Current follow-on: [TASK002](tasks/TASK002-native-macos-60fps.md), In Progress with autonomous implementation and experiment work authorized. [TASK001](tasks/TASK001-native-macos-port.md) is complete for the native prototype; standalone packaging remains unresolved.
+Updated: 2026-10-23. Current follow-on: [TASK002](tasks/TASK002-native-macos-60fps.md), In Progress with autonomous implementation and experiment work authorized. [TASK003](tasks/TASK003-web-vehicle-viewer.md) is complete on branch `codex/http-streaming`; the Rust web gateway and Python CARLA adapter passed live local browser/CARLA acceptance. [TASK001](tasks/TASK001-native-macos-port.md) is complete for the native prototype; standalone packaging remains unresolved.
 
 ## Direction
 
@@ -53,3 +53,9 @@ Updated: 2026-10-23. Current follow-on: [TASK002](tasks/TASK002-native-macos-60f
 ## Remaining productization
 - Compare sensor output with analytic references and extend timing/stability runs to larger maps and longer durations.
 - Test other Python minors, certify the deployment target on older macOS releases, and add a native macOS CI runner.
+
+## Completed web-control work (TASK003)
+- Branch `codex/http-streaming` contains a Rust Axum viewer/control gateway under `Util/WebControl/` with a matching Python CARLA 0.9.16 adapter.
+- The prototype serves localhost only, spawns an owned Tesla and RGB camera, streams JPEG frames, and exposes keyboard/on-screen controls behind an explicit single-controller lease.
+- Server-side control state disarms after stale camera/input and requires explicit re-arm. The Python adapter's synchronous CARLA RPC can block its 300 ms watchdog and camera callbacks until the 10 s RPC timeout; braking/cleanup are best-effort.
+- `cargo check --locked`, release build, Python compile, JavaScript syntax check and diff whitespace check passed. Live acceptance showed advancing camera frames, successful controller acquisition, second-viewer lease denial, a brief bounded acceleration input, stale-frame rejection/disarm, and adapter-owned vehicle/camera cleanup on shutdown. CARLA's blocking control RPC can still delay the adapter watchdog up to its 10 s timeout, so braking is best-effort during a stalled RPC.

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="carla-web-token" content="__CARLA_WEB_TOKEN__">
+  <title>CARLA Web Control</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">CARLA · LOCAL SESSION</p>
+        <h1>Vehicle control</h1>
+      </div>
+      <div class="connection"><span id="connection-dot"></span><span id="connection-status">Starting…</span></div>
+    </header>
+
+    <section class="viewer-card" aria-label="Live camera">
+      <div class="viewer-head"><span>LIVE CAMERA</span><span id="frame-info">Waiting for stream</span></div>
+      <canvas id="camera" width="640" height="360" aria-label="Vehicle camera view"></canvas>
+      <div id="empty-state">Waiting for CARLA camera frames…</div>
+    </section>
+
+    <section class="drive-card">
+      <div class="drive-intro">
+        <div><p class="eyebrow">DRIVING</p><h2>Take the wheel</h2></div>
+        <button id="take-control" class="primary" disabled>Take control</button>
+      </div>
+      <p id="control-message" class="muted">Connect to CARLA, then enable manual control.</p>
+      <div class="controls" id="controls" aria-label="Vehicle controls">
+        <button data-key="w">Accelerate <kbd>W</kbd></button>
+        <button data-key="a">Left <kbd>A</kbd></button>
+        <button data-key="s">Brake <kbd>S</kbd></button>
+        <button data-key="d">Right <kbd>D</kbd></button>
+      </div>
+      <p class="hint">Hold W/A/S/D or use the buttons. Releasing control applies the brake. A lost connection brakes the vehicle and requires re-arming.</p>
+    </section>
+    <footer>Local-only prototype · CARLA API control · <span id="vehicle-status">No vehicle yet</span></footer>
+  </main>
+  <script src="/app.js" defer></script>
+</body>
+</html>

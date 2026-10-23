@@ -11,6 +11,7 @@
 - Installed extension has ARM64 Mach-O architecture, macOS 12.0 minimum metadata, and only system dynamic libraries.
 - The native ARM64 simulator runs: the CARLA editor build in game mode serves the CARLA RPC API, loads a map with the Metal renderer, spawns vehicles and streams the camera sensors.
 - The native Python acceptance test passes end to end against that server, including the frame synchronisation and the fixed simulation step.
+- TASK003 live local acceptance passed: the Rust web gateway and Python adapter displayed advancing CARLA camera frames, enforced the one-controller lease and stale-frame disarm, and removed their owned vehicle/camera actors at shutdown.
 - The native engine third-party libraries that blocked the link were rebuilt for arm64 from the pinned engine sources: NVIDIA Texture Tools 2.0.8 with squish, and the SpeedTree core library.
 - The Intel ISPC texture compressor and the Qualcomm ETC2 converter have no arm64 build, so the corresponding texture formats are disabled on native Apple Silicon.
 
@@ -43,6 +44,13 @@
 - Analytic accuracy of sensor output, sustained 60 FPS delivery, the runnable cooked/packaged distribution, a clean second-machine install, Linux/Windows builds, and certification of the deployment target on older macOS versions. RGB/depth/segmentation/LiDAR/radar payload delivery and frame/timestamp alignment passed a short combined smoke test.
 
 ## Log
+
+### 2026-10-23 — TASK003 live web-control acceptance
+
+- Ran the native CARLA 0.9.16 editor server on `Town02_Opt`, then launched the Rust viewer with the matching CPython 3.11 CARLA wheel. The browser displayed advancing 640×360 JPEG frames and the adapter spawned Tesla actor 47 with its attached RGB camera.
+- Verified the first browser tab could acquire control, a second tab could view but received “Another browser owns control,” and sent a brief 250 ms acceleration-button input before explicitly releasing control.
+- Sent a local WebSocket command with a displayed frame 100 IDs behind the latest. The gateway rejected it and disarmed the lease with the stale-frame message.
+- Shut down the web gateway and confirmed actor 47 was destroyed, no `web_control` vehicle or camera remained, and port 8765 closed. Stopped the CARLA server afterward. The adapter's documented blocking-RPC/watchdog limitation remains.
 
 ### 2026-10-23 — 60 FPS ring evaluation
 
